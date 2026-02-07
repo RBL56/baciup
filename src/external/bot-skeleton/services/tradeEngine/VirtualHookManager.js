@@ -14,24 +14,19 @@ class VirtualHookManager {
         this.simulations = new Map();
         console.log('[VH] Singleton Ready');
 
-        // Ensure state is clean when bot starts
         globalObserver.register('bot.running', () => {
             const settings = this.getSettings();
             if (settings && settings.is_enabled) {
-                this.reset(); // Reset counters on every bot run
-                globalObserver.emit('ui.log.success', '[Virtual Hook] ACTIVE. Monitoring for pattern.');
+                this.reset();
+                const account_label = api_base.account_id?.startsWith('VRT') ? 'Demo' : 'Real';
+                globalObserver.emit('ui.log.success', `[Virtual Hook] ACTIVE on ${account_label} account. Monitoring for pattern.`);
             }
         });
 
-        // Global watcher for all contract completions (Real and Ghost)
         globalObserver.register('bot.contract', (contract) => {
             const settings = this.getSettings();
             if (!settings || !settings.is_enabled) return;
-
-            // Trigger closure logic when contract is finished
             if (contract.is_sold || (contract.status && contract.status !== 'open')) {
-                // Prevent duplicate processing if it's already in our simulations map
-                // (though onContractClosed handles this gracefully)
                 this.onContractClosed(contract);
             }
         });
@@ -65,16 +60,19 @@ class VirtualHookManager {
         const { enable_after_initial, virtual_trades_condition, real_trades_condition } = settings;
 
         try {
+            const is_demo = api_base.account_id?.startsWith('VRT');
+            const account_type = is_demo ? 'Demo' : 'Real';
+
             // 1. Initial Delay Phase
             const initial_limit = enable_after_initial === 'Immediately' ? 0 : parseInt(enable_after_initial);
             if (!this.vh_variables.has_started) {
                 if (this.vh_variables.initial_trades_count < initial_limit) {
                     const remaining = initial_limit - this.vh_variables.initial_trades_count;
-                    globalObserver.emit('ui.log.notify', `[Virtual Hook] Initial Delay: ${remaining} real trades remaining before activation.`);
+                    globalObserver.emit('ui.log.notify', `[Virtual Hook] Initial Delay: ${remaining} trades remaining on ${account_type} account.`);
                     return null;
                 } else {
                     this.vh_variables.has_started = true;
-                    globalObserver.emit('ui.log.success', '[Virtual Hook] ACTIVATED. Starting first simulation.');
+                    globalObserver.emit('ui.log.success', '[Virtual Hook] ACTIVATED. Starting bot simulation (Ghost trades).');
                 }
             }
 
@@ -83,14 +81,14 @@ class VirtualHookManager {
                 if (this.vh_variables.consecutive_losses >= virtual_trades_condition) {
                     this.vh_variables.mode = 'REAL';
                     this.vh_variables.real_trades_count = 0;
-                    globalObserver.emit('ui.log.success', `[Virtual Hook] Condition met (${virtual_trades_condition} losses). SWITCHING TO REAL TRADES!`);
+                    globalObserver.emit('ui.log.success', `[Virtual Hook] Pattern found (${virtual_trades_condition} losses). SWITCHING TO ${account_type.toUpperCase()} TRADES!`);
                 }
             } else if (this.vh_variables.mode === 'REAL') {
                 const limit = real_trades_condition === 'Immediately' ? 1 : parseInt(real_trades_condition);
                 if (this.vh_variables.real_trades_count >= limit) {
                     this.vh_variables.mode = 'VIRTUAL';
                     this.vh_variables.consecutive_losses = 0;
-                    globalObserver.emit('ui.log.notify', `[Virtual Hook] Real trades cycle finished (${limit}). Returning to virtual simulation.`);
+                    globalObserver.emit('ui.log.notify', `[Virtual Hook] ${account_type} cycle finished. Returning to bot simulator.`);
                 }
             }
 
@@ -117,12 +115,12 @@ class VirtualHookManager {
                     }
                 };
 
-                globalObserver.emit('ui.log.notify', `[Virtual Hook] Simulating ${contract_type}...`);
+                globalObserver.emit('ui.log.notify', `[Virtual Hook] Simulator: Placing ghost ${contract_type}...`);
                 this.runGhostSimulation(engine, contract_type, proposal, buy_response.buy);
                 return Promise.resolve(buy_response);
             }
 
-            console.log(`[VH] Mode: REAL. Executing contract on account ${api_base.account_id}`);
+            console.log(`[VH] Mode: REAL. Executing real trade on ${account_type} account (${api_base.account_id})`);
             return null;
 
         } catch (e) {
@@ -170,9 +168,6 @@ class VirtualHookManager {
                         exit_tick_display_value: exit_tick.toString(),
                         exit_tick_time: Math.floor(Date.now() / 1000),
                     });
-
-                    // Removed explicit onContractClosed call as the global listener will handle it 
-                    // when OpenContract.js broadcasts the mock contract result.
                 }
             }
         });
@@ -217,7 +212,6 @@ class VirtualHookManager {
 
     onContractClosed(contract) {
         try {
-            // Check if we've already processed this contract to avoid double increments
             if (this.simulations.has(contract.contract_id)) return;
             this.simulations.set(contract.contract_id, true);
 
@@ -244,7 +238,8 @@ class VirtualHookManager {
                 }
             } else if (this.vh_variables.mode === 'REAL') {
                 this.vh_variables.real_trades_count++;
-                console.log(`[VH] Real trade completed. Count: ${this.vh_variables.real_trades_count}`);
+                const account_type = api_base.account_id?.startsWith('VRT') ? 'Demo' : 'Real';
+                console.log(`[VH] Trade completed on ${account_type}. Count: ${this.vh_variables.real_trades_count}`);
             }
         } catch (e) { }
     }
