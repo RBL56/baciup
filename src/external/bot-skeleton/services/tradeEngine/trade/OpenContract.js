@@ -60,7 +60,7 @@ export default Engine =>
                         });
 
                         // VIRTUAL HOOK LOGIC START
-                        const VirtualHookManager = require('../../VirtualHookManager').default;
+                        const VirtualHookManager = require('../VirtualHookManager').default;
                         VirtualHookManager.onContractClosed(contract);
                         // VIRTUAL HOOK LOGIC END
 
