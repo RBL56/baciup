@@ -93,6 +93,7 @@ class VirtualHookManager {
                         contract_id,
                         transaction_id: `GHOST_TX_${Date.now()}`,
                         longcode: `[Simulated] ${proposal?.longcode || contract_type}`,
+                        shortcode: `GHOST_${contract_type}_${underlying}_${Date.now()}_S0P_0`, // ADD DUMMY SHORTCODE
                         buy_price: 0,
                         is_virtual_hook: true,
                         contract_type,
@@ -128,7 +129,6 @@ class VirtualHookManager {
         let ticks_count = 0;
         const start_time = Math.floor(Date.now() / 1000);
 
-        // WRAP IN DATA FOR OPENCONTRACT.JS
         this.injectMockContract(buy_info, {
             status: 'open',
             date_start: start_time,
@@ -138,7 +138,6 @@ class VirtualHookManager {
         });
 
         const tick_sub = api_base.api.onMessage().subscribe(({ data: raw_data }) => {
-            // Observe actual tick data which is wrapped in { data } by api-base.ts monkey patch
             const data = raw_data;
             if (data.msg_type === 'tick' && data.tick.symbol === underlying) {
                 ticks_count++;
@@ -168,7 +167,10 @@ class VirtualHookManager {
         if (type.includes('PUT') || type.includes('DOWN')) return exit < entry ? 1 : -1;
 
         if (type.includes('DIGIT')) {
-            const last_digit = parseInt(exit.toString().split('').pop());
+            // Robust digit extraction
+            const tick_str = (exit || 0).toString();
+            const last_digit = parseInt(tick_str.charAt(tick_str.length - 1));
+
             const prediction = proposal?.barrier || proposal?.last_digit_prediction || 0;
             if (type.includes('DIFF')) return last_digit != prediction ? 1 : -1;
             if (type.includes('MATCH')) return last_digit == prediction ? 1 : -1;
@@ -189,13 +191,13 @@ class VirtualHookManager {
                 buy_price: 0,
                 underlying: buy_info.underlying,
                 contract_type: buy_info.contract_type,
+                shortcode: buy_info.shortcode, // ENSURE SHORTCODE IS PASSED
                 currency: 'USD',
                 is_virtual_hook: true,
                 display_name: buy_info.underlying,
                 ...overrides
             }
         };
-        // WRAP IN DATA PROPERTY
         api_base.bridge_subject.next({ data: mock_msg });
     }
 
@@ -209,7 +211,6 @@ class VirtualHookManager {
                 return;
             }
 
-            // Robust profit detection
             let profit = Number(contract.profit);
             if (isNaN(profit)) {
                 profit = Number(contract.sell_price) - Number(contract.buy_price);
