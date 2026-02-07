@@ -1,5 +1,6 @@
 
 import { api_base } from '../api/api-base';
+import { observer as globalObserver } from '../../utils/observer';
 
 class VirtualHookManager {
     constructor() {
@@ -11,9 +12,11 @@ class VirtualHookManager {
             has_started: false,
         };
         this.simulations = new Map();
+        console.log('[VH] VirtualHookManager initialized.');
     }
 
     reset() {
+        console.log('[VH] Resetting VirtualHookManager state.');
         this.vh_variables = {
             mode: 'VIRTUAL',
             consecutive_losses: 0,
@@ -27,20 +30,28 @@ class VirtualHookManager {
     async onPurchase(engine, contract_type) {
         try {
             const DBotStore = require('../../scratch/dbot-store').default;
-            const { client } = DBotStore.instance || {};
-            const { is_enabled, enable_after_initial, virtual_trades_condition, real_trades_condition } = client?.virtual_hook_settings || {};
+            const client = DBotStore.instance?.client;
 
-            if (!is_enabled) return null;
+            if (!client) {
+                console.warn('[VH] DBotStore.instance.client is not available. Skipping VH logic.');
+                return null;
+            }
+
+            const { is_enabled, enable_after_initial, virtual_trades_condition, real_trades_condition } = client.virtual_hook_settings || {};
+
+            if (!is_enabled) {
+                return null;
+            }
 
             // 1. Initial Trades Delay logic
             const initial_limit = enable_after_initial === 'Immediately' ? 0 : parseInt(enable_after_initial);
             if (!this.vh_variables.has_started) {
                 if (this.vh_variables.initial_trades_count < initial_limit) {
                     console.log(`[VH] Initial Delay Mode: Waiting for ${initial_limit - this.vh_variables.initial_trades_count} more trades.`);
-                    // Fallthrough to simulation
+                    return null;
                 } else {
                     this.vh_variables.has_started = true;
-                    console.log('[VH] Initial delay finished. Virtual Hook active.');
+                    globalObserver.emit('ui.log.notify', '[Virtual Hook] Initial delay finished. Virtual Hook active.');
                 }
             }
 
@@ -49,9 +60,10 @@ class VirtualHookManager {
             if (this.vh_variables.has_started) {
                 if (this.vh_variables.mode === 'VIRTUAL') {
                     if (this.vh_variables.consecutive_losses >= virtual_trades_condition) {
-                        console.log(`[VH] Condition met (${virtual_trades_condition} losses). Target REAL mode.`);
+                        console.log(`[VH] Condition met (${virtual_trades_condition} losses). Switching to REAL mode.`);
                         new_mode = 'REAL';
                         this.vh_variables.real_trades_count = 0;
+                        globalObserver.emit('ui.log.success', `[Virtual Hook] Condition met (${virtual_trades_condition} losses). STRIKING REAL!`);
                     }
                 } else {
                     const limit = real_trades_condition === 'Immediately' ? 1 : parseInt(real_trades_condition);
@@ -59,6 +71,7 @@ class VirtualHookManager {
                         console.log(`[VH] Real trades limit (${limit}) reached. Returning to VIRTUAL mode.`);
                         new_mode = 'VIRTUAL';
                         this.vh_variables.consecutive_losses = 0;
+                        globalObserver.emit('ui.log.notify', '[Virtual Hook] Real trades limit reached. Returning to VIRTUAL.');
                     }
                 }
             }
@@ -67,25 +80,38 @@ class VirtualHookManager {
 
             // 3. Execution: If VIRTUAL, Simulate. If REAL, allow normal purchase.
             if (this.vh_variables.mode === 'VIRTUAL') {
-                const proposal = engine.selectProposal(contract_type);
+                let proposal;
+                try {
+                    proposal = engine.selectProposal(contract_type);
+                } catch (e) {
+                    console.warn('[VH] No proposal found for simulation, using trade options fallback.');
+                }
+
+                const underlying = proposal?.underlying || engine.tradeOptions?.symbol || engine.symbol;
+
+                if (!underlying) {
+                    console.error('[VH] Cannot simulate: Underlying symbol not found.');
+                    return null;
+                }
+
                 const contract_id = `GHOST_${Date.now()}`;
 
-                console.log(`[VH] Triggering Ghost Trade (Simulation) for ${contract_type}. ID: ${contract_id}`);
+                console.log(`[VH] Triggering Ghost Trade (Simulation) for ${contract_type} on ${underlying}. ID: ${contract_id}`);
 
                 const buy_response = {
                     buy: {
                         contract_id,
                         transaction_id: `GHOST_TX_${Date.now()}`,
-                        longcode: `[Simulated] ${proposal.longcode}`,
+                        longcode: `[Simulated] ${proposal?.longcode || contract_type + ' @ ' + underlying}`,
                         buy_price: 0,
                         is_virtual_hook: true, // Flag for UI
                         contract_type,
-                        underlying: proposal.underlying,
+                        underlying,
                         currency: 'USD'
                     }
                 };
 
-                // Start Paper Trading Task
+                // Start Paper Trading Task (Async)
                 this.runGhostSimulation(engine, contract_type, proposal, buy_response.buy);
 
                 return Promise.resolve(buy_response);
@@ -95,7 +121,7 @@ class VirtualHookManager {
             console.log(`[VH] REAL Mode: Placing real trade on your logged-in account ${api_base.account_id}`);
             return null;
         } catch (e) {
-            console.error('[VH] Error in Virtual Hook logic:', e);
+            console.error('[VH] Error in Virtual Hook onPurchase:', e);
         }
 
         return null;
@@ -103,7 +129,20 @@ class VirtualHookManager {
 
     async runGhostSimulation(engine, contract_type, proposal, buy_info) {
         const { contract_id, underlying } = buy_info;
-        const entry_tick = await engine.getLastTick(false);
+
+        // Wait a small bit to ensure Purchase.js onSuccess has run and set this.contractId
+        await new Promise(r => setTimeout(r, 200));
+
+        let entry_tick;
+        try {
+            // Priority 1: Use last tick from engine scope
+            // Priority 2: Request fresh tick
+            entry_tick = engine.lastTick?.quote || await engine.getLastTick(false);
+        } catch (e) {
+            console.error('[VH] Error getting entry tick for simulation:', e);
+            return;
+        }
+
         const duration = 5; // Simulation duration in ticks
         let ticks_count = 0;
         const start_time = Math.floor(Date.now() / 1000);
@@ -113,6 +152,7 @@ class VirtualHookManager {
             status: 'open',
             date_start: start_time,
             entry_tick,
+            entry_tick_display_value: entry_tick.toString(),
             entry_tick_time: start_time,
         });
 
@@ -123,7 +163,7 @@ class VirtualHookManager {
                 if (ticks_count >= duration) {
                     tick_sub.unsubscribe();
                     const exit_tick = data.tick.quote;
-                    const profit = this.calculateGhostProfit(contract_type, entry_tick, exit_tick);
+                    const profit = this.calculateGhostProfit(contract_type, entry_tick, exit_tick, proposal);
 
                     console.log(`[VH] Ghost Trade Result: ${profit > 0 ? 'WON' : 'LOST'} (Entry: ${entry_tick}, Exit: ${exit_tick})`);
 
@@ -134,6 +174,7 @@ class VirtualHookManager {
                         is_completed: true,
                         is_sold: true,
                         exit_tick,
+                        exit_tick_display_value: exit_tick.toString(),
                         exit_tick_time: Math.floor(Date.now() / 1000),
                     });
 
@@ -144,18 +185,36 @@ class VirtualHookManager {
         });
     }
 
-    calculateGhostProfit(type, entry, exit) {
+    calculateGhostProfit(type, entry, exit, proposal) {
         if (type.includes('CALL') || type.includes('UP')) {
             return exit > entry ? 1 : -1;
         }
         if (type.includes('PUT') || type.includes('DOWN')) {
             return exit < entry ? 1 : -1;
         }
-        // Basic Digits Simulation
+        // Realistic Digits Simulation
         if (type.includes('DIGIT')) {
             const last_digit = parseInt(exit.toString().split('').pop());
-            // This is just a placeholder simulation
-            return last_digit % 2 === 0 ? 1 : -1;
+            const prediction = proposal?.barrier || proposal?.last_digit_prediction || 0;
+
+            if (type.includes('DIFF')) {
+                return last_digit != prediction ? 1 : -1;
+            }
+            if (type.includes('MATCH')) {
+                return last_digit == prediction ? 1 : -1;
+            }
+            if (type.includes('OVER')) {
+                return last_digit > prediction ? 1 : -1;
+            }
+            if (type.includes('UNDER')) {
+                return last_digit < prediction ? 1 : -1;
+            }
+            if (type.includes('EVEN')) {
+                return last_digit % 2 === 0 ? 1 : -1;
+            }
+            if (type.includes('ODD')) {
+                return last_digit % 2 !== 0 ? 1 : -1;
+            }
         }
         return -1;
     }
@@ -176,16 +235,16 @@ class VirtualHookManager {
             }
         };
 
-        // Global Injection: Triggers UI updates and store updates
         api_base.bridge_subject.next(mock_msg);
     }
 
     onContractClosed(contract) {
         try {
             const DBotStore = require('../../scratch/dbot-store').default;
-            const { client } = DBotStore.instance || {};
-            const { is_enabled } = client?.virtual_hook_settings || {};
+            const client = DBotStore.instance?.client;
+            if (!client) return;
 
+            const { is_enabled, virtual_trades_condition } = client.virtual_hook_settings || {};
             if (!is_enabled) return;
 
             if (!this.vh_variables.has_started) {
@@ -196,14 +255,14 @@ class VirtualHookManager {
             if (this.vh_variables.mode === 'VIRTUAL') {
                 if (profit < 0) {
                     this.vh_variables.consecutive_losses++;
-                    console.log(`[VH] Virtual Loss. Total Consecutive: ${this.vh_variables.consecutive_losses}`);
+                    globalObserver.emit('ui.log.notify', `[Virtual Hook] Virtual Loss. Streak: ${this.vh_variables.consecutive_losses}/${virtual_trades_condition}`);
                 } else if (profit > 0) {
                     this.vh_variables.consecutive_losses = 0;
-                    console.log(`[VH] Virtual Win. Counter reset.`);
+                    globalObserver.emit('ui.log.notify', '[Virtual Hook] Virtual Win. Resetting streak.');
                 }
             } else if (this.vh_variables.mode === 'REAL') {
                 this.vh_variables.real_trades_count++;
-                console.log(`[VH] Real Trade. Total: ${this.vh_variables.real_trades_count}`);
+                console.log(`[VH] Real Trade recorded. Count: ${this.vh_variables.real_trades_count}`);
             }
         } catch (e) {
             console.error('[VH] Error in onContractClosed:', e);

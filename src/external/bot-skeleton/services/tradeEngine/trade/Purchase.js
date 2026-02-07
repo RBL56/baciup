@@ -119,7 +119,18 @@ export default Engine =>
                 ).then(onSuccess);
             }
             const trade_option = tradeOptionToBuy(contract_type, this.tradeOptions);
-            const action = () => api_base.api.send(trade_option);
+            const action = async () => {
+                // VIRTUAL HOOK LOGIC START
+                const VirtualHookManager = require('../VirtualHookManager').default;
+                const vh_result = await VirtualHookManager.onPurchase(this, contract_type);
+
+                if (vh_result) {
+                    return vh_result;
+                }
+                // VIRTUAL HOOK LOGIC END
+
+                return api_base.api.send(trade_option);
+            };
 
             this.isSold = false;
 
