@@ -146,24 +146,24 @@ class VirtualHookManager {
                 if (simulator_token && this.simulator_api) {
                     await this.simulator_auth_promise;
 
-                    globalObserver.emit('ui.log.notify', `[Virtual Hook] Simulator: Placing accurate ${contract_type} on background Demo...`);
-                    this.runSimulatorTrade(this.simulator_api, contract_type, proposal);
-
-                    // Return a fake response to satisfy the engine while we trade in background
+                    // Fake IDs for the engine to track in the UI
                     const contract_id = `GHOST_${Date.now()}`;
-                    return Promise.resolve({
-                        buy: {
-                            contract_id,
-                            transaction_id: `GHOST_TX_${Date.now()}`,
-                            longcode: `[API Simulated] ${proposal?.longcode || contract_type}`,
-                            shortcode: `GHOST_${contract_type}_${underlying}_${Date.now()}_S0P_0`,
-                            buy_price: 0,
-                            is_virtual_hook: true,
-                            contract_type,
-                            underlying,
-                            currency: 'USD'
-                        }
-                    });
+                    const buy_info = {
+                        contract_id,
+                        transaction_id: `GHOST_TX_${Date.now()}`,
+                        longcode: `[API Simulated] ${proposal?.longcode || contract_type}`,
+                        shortcode: `GHOST_${contract_type}_${underlying}_${Date.now()}_S0P_0`,
+                        buy_price: 0,
+                        is_virtual_hook: true,
+                        contract_type,
+                        underlying,
+                        currency: 'USD'
+                    };
+
+                    globalObserver.emit('ui.log.notify', `[Virtual Hook] Simulator: Placing accurate ${contract_type} on background Demo...`);
+                    this.runSimulatorTrade(this.simulator_api, contract_type, proposal, buy_info);
+
+                    return Promise.resolve({ buy: buy_info });
                 }
 
                 // Fallback to tick simulation
@@ -196,7 +196,7 @@ class VirtualHookManager {
         return null;
     }
 
-    async runSimulatorTrade(api, contract_type, proposal) {
+    async runSimulatorTrade(api, contract_type, proposal, buy_info) {
         if (!proposal) return;
 
         try {
@@ -206,25 +206,24 @@ class VirtualHookManager {
             };
 
             const buy_response = await api.send(buy_req);
-            const { contract_id } = buy_response.buy;
+            const real_contract_id = buy_response.buy.contract_id;
 
             // Subscribe to this background contract
             api.onMessage().subscribe(({ data: raw_data }) => {
                 const data = raw_data;
                 if (data.msg_type === 'proposal_open_contract') {
                     const contract = data.proposal_open_contract;
-                    if (contract.contract_id !== contract_id) return;
+                    if (contract.contract_id !== real_contract_id) return;
 
                     // Inject updates into the main bridge so the user sees progress
-                    this.injectSimulatorContract(contract);
+                    // We MAP the real contract data to our GHOST IDs so the UI picks it up
+                    this.injectSimulatorContract(contract, buy_info);
 
-                    // We don't need to manually check win/loss because the global observer
-                    // in the main session doesn't see these background messages.
-                    // But we DO need to update our internal logic when it finishes.
                     if (contract.is_sold || (contract.status && contract.status !== 'open')) {
                         // The background API gets the real profit/loss
                         this.onContractClosed({
                             ...contract,
+                            contract_id: buy_info.contract_id, // Ensure we use the mapped ID for closure check
                             is_virtual_hook: true
                         });
                     }
@@ -232,7 +231,7 @@ class VirtualHookManager {
             });
 
             // Start subscription
-            api.send({ proposal_open_contract: 1, contract_id, subscribe: 1 });
+            api.send({ proposal_open_contract: 1, contract_id: real_contract_id, subscribe: 1 });
 
         } catch (e) {
             console.error('[VH] Simulator Trade Error:', e);
@@ -301,11 +300,13 @@ class VirtualHookManager {
         return -1;
     }
 
-    injectSimulatorContract(contract) {
+    injectSimulatorContract(contract, buy_info) {
         const mock_msg = {
             msg_type: 'proposal_open_contract',
             proposal_open_contract: {
                 ...contract,
+                contract_id: buy_info.contract_id, // Map real ID -> Ghost ID
+                transaction_ids: { buy: buy_info.transaction_id.replace('GHOST_TX_', '') }, // Map real TX -> Ghost TX
                 is_virtual_hook: true,
                 buy_price: 0, // Keep UI showing 0 stake for simulation
             }
@@ -318,7 +319,7 @@ class VirtualHookManager {
             msg_type: 'proposal_open_contract',
             proposal_open_contract: {
                 contract_id: buy_info.contract_id,
-                transaction_ids: { buy: buy_info.transaction_id.replace('TX_', '') },
+                transaction_ids: { buy: buy_info.transaction_id.replace('GHOST_TX_', '') },
                 buy_price: 0,
                 underlying: buy_info.underlying,
                 contract_type: buy_info.contract_type,
