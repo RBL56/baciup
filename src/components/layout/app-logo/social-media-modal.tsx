@@ -68,6 +68,7 @@ const SocialMediaModal = ({ is_open, toggleModal }: TSocialMediaModal) => {
                             target='_blank'
                             rel='noopener noreferrer'
                             className='social-media-modal__item'
+                            onClick={(e) => e.preventDefault()}
                         >
                             {link.icon}
                             <Text size='sm' weight='bold' className='social-media-modal__text'>
@@ -78,7 +79,7 @@ const SocialMediaModal = ({ is_open, toggleModal }: TSocialMediaModal) => {
                 </div>
             </Modal.Body>
             <Modal.Footer>
-                <Button primary large onClick={toggleModal}>
+                <Button primary large onClick={toggleModal} type='button'>
                     Close
                 </Button>
             </Modal.Footer>

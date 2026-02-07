@@ -5,7 +5,8 @@ import locoSpeedBotEntryXml from '@/xml/LOCO SPEED BOT WITH ENTRY .xml';
 import entryPointBotOver2Xml from '@/xml/_Entry point Bot over 2.xml';
 import unstoppableDifferBotXml from '@/xml/UNSTOPPABLE DIFFER BOT.xml';
 import overUnderAutoSwitcherXml from '@/xml/OVER UNDER AUTO SWITCHER.xml';
-import under3BotXml from '@/xml/UNDER 3 BOT.xml';
+import under3BotV1Xml from '@/xml/UNDER_3_BOT_V1.xml';
+
 export type TBotConfig = {
     id: string;
     name: string;
@@ -64,11 +65,12 @@ export const FREE_BOTS: TBotConfig[] = [
         xml: overUnderAutoSwitcherXml,
         category: 'Automatic',
     },
+
     {
-        id: 'under_3_bot',
-        name: 'UNDER 3 V1 FAST',
-        description: 'Strategy focused on under 3 predictions',
-        xml: under3BotXml,
+        id: 'under_3_bot_v1',
+        name: 'UNDER3 BOT V1',
+        description: 'Automated trading strategy for Under 3',
+        xml: under3BotV1Xml,
         category: 'Automatic',
     },
 ];

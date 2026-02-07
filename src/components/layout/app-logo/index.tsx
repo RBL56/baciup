@@ -13,7 +13,7 @@ export const AppLogo = () => {
     };
 
     return (
-        <div className='app-header__logo-link' onClick={() => window.location.reload()} style={{ cursor: 'pointer' }}>
+        <div className='app-header__logo-link'>
             <img src='/images/loco-logo.jpg' alt='LOCO THE TRADER' className='app-header__logo-image' />
             <span className='app-header__logo-text'>LOCO THE TRADER</span>
             <svg
@@ -23,7 +23,7 @@ export const AppLogo = () => {
                 fill='none'
                 xmlns='http://www.w3.org/2000/svg'
                 className='app-header__chat-icon'
-                style={{ marginLeft: '4px' }}
+                style={{ marginLeft: '4px', cursor: 'pointer' }}
                 onClick={onIconClick}
             >
                 <path
