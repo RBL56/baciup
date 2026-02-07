@@ -4,13 +4,13 @@ import { api_base } from '../api/api-base';
 class VirtualHookManager {
     constructor() {
         this.vh_variables = {
-            mode: 'VIRTUAL', // Start in Virtual
+            mode: 'VIRTUAL',
             consecutive_losses: 0,
             real_trades_count: 0,
             initial_trades_count: 0,
             has_started: false,
-            session_type: null // 'TESTING' (Demo stays Demo) or 'PRODUCTION' (Demo switches to Real)
         };
+        this.simulations = new Map();
     }
 
     reset() {
@@ -20,8 +20,8 @@ class VirtualHookManager {
             real_trades_count: 0,
             initial_trades_count: 0,
             has_started: false,
-            session_type: null
         };
+        this.simulations.clear();
     }
 
     async onPurchase(engine, contract_type) {
@@ -32,116 +32,68 @@ class VirtualHookManager {
 
             if (!is_enabled) return null;
 
-            const accounts = Object.values(client.accounts || {});
-            const virtual_account = accounts.find(a => a.is_virtual);
-            const real_account = accounts.find(a => !a.is_virtual);
-            const current_account_id = api_base.account_id || localStorage.getItem('active_loginid');
-            const current_account = accounts.find(a => a.loginid === current_account_id);
-
-            // 1. Initial Session Detection
-            if (this.vh_variables.session_type === null) {
-                this.vh_variables.session_type = current_account?.is_virtual ? 'TESTING' : 'PRODUCTION';
-                console.log(`[VH] Session Type detected: ${this.vh_variables.session_type} (Starting on ${current_account_id})`);
-            }
-
-            // 2. Initial Trades Delay logic
+            // 1. Initial Trades Delay logic
             const initial_limit = enable_after_initial === 'Immediately' ? 0 : parseInt(enable_after_initial);
             if (!this.vh_variables.has_started) {
                 if (this.vh_variables.initial_trades_count < initial_limit) {
                     console.log(`[VH] Initial Delay Mode: Waiting for ${initial_limit - this.vh_variables.initial_trades_count} more trades.`);
-                    // We continue below, but we will STAY in VIRTUAL mode and skip streak checks
+                    // Fallthrough to simulation
                 } else {
                     this.vh_variables.has_started = true;
-                    console.log('[VH] Initial delay finished. Virtual Hook tracking active.');
+                    console.log('[VH] Initial delay finished. Virtual Hook active.');
                 }
             }
 
+            // 2. Determine Mode
             let new_mode = this.vh_variables.mode;
-            let target_account = null;
-
-            // 3. Logic: Mode Switching Condition Check
             if (this.vh_variables.has_started) {
                 if (this.vh_variables.mode === 'VIRTUAL') {
                     if (this.vh_variables.consecutive_losses >= virtual_trades_condition) {
                         console.log(`[VH] Condition met (${virtual_trades_condition} losses). Target REAL mode.`);
                         new_mode = 'REAL';
                         this.vh_variables.real_trades_count = 0;
-
-                        if (this.vh_variables.session_type === 'TESTING') {
-                            target_account = virtual_account || current_account;
-                        } else {
-                            target_account = real_account || current_account;
-                        }
-                    } else {
-                        target_account = virtual_account || current_account;
                     }
                 } else {
-                    // REAL Mode
                     const limit = real_trades_condition === 'Immediately' ? 1 : parseInt(real_trades_condition);
                     if (this.vh_variables.real_trades_count >= limit) {
                         console.log(`[VH] Real trades limit (${limit}) reached. Returning to VIRTUAL mode.`);
                         new_mode = 'VIRTUAL';
                         this.vh_variables.consecutive_losses = 0;
-                        target_account = virtual_account || current_account;
-                    } else {
-                        if (this.vh_variables.session_type === 'TESTING') {
-                            target_account = virtual_account || current_account;
-                        } else {
-                            target_account = real_account || current_account;
-                        }
                     }
                 }
-            } else {
-                // During initial delay, ALWAYS target the virtual account to start safely if Virtual Hook is on
-                target_account = virtual_account || current_account;
-                new_mode = 'VIRTUAL';
             }
 
-            // 4. Execution: Determine if a systemic switch is required
-            const is_different_account = target_account && target_account.loginid !== current_account_id;
+            this.vh_variables.mode = new_mode;
 
-            if (is_different_account) {
-                console.log(`[VH] Switching account: ${current_account_id} -> ${target_account.loginid}`);
+            // 3. Execution: If VIRTUAL, Simulate. If REAL, allow normal purchase.
+            if (this.vh_variables.mode === 'VIRTUAL') {
+                const proposal = engine.selectProposal(contract_type);
+                const contract_id = `GHOST_${Date.now()}`;
 
-                // CRITICAL: Update token in api_base BEFORE authorizing
-                api_base.token = target_account.token;
+                console.log(`[VH] Triggering Ghost Trade (Simulation) for ${contract_type}. ID: ${contract_id}`);
 
-                // Prepare persistence
-                localStorage.setItem('active_loginid', target_account.loginid);
-                localStorage.setItem('authToken', target_account.token);
+                const buy_response = {
+                    buy: {
+                        contract_id,
+                        transaction_id: `GHOST_TX_${Date.now()}`,
+                        longcode: `[Simulated] ${proposal.longcode}`,
+                        buy_price: 0,
+                        is_virtual_hook: true, // Flag for UI
+                        contract_type,
+                        underlying: proposal.underlying,
+                        currency: 'USD'
+                    }
+                };
 
-                // Update Client Store (UI)
-                client.setLoginId(target_account.loginid);
-                client.setIsLoggedIn(true);
+                // Start Paper Trading Task
+                this.runGhostSimulation(engine, contract_type, proposal, buy_response.buy);
 
-                // Systemic Switch
-                await api_base.authorizeAndSubscribe();
-
-                // Sync Engine
-                engine.token = api_base.token;
-                engine.accountInfo = api_base.account_info;
-
-                // Sync Mode
-                this.vh_variables.mode = new_mode;
-
-                console.log(`[VH] Switched to ${target_account.loginid}. Mode: ${new_mode}`);
-
-                // Refresh Proposals for NEW account
-                engine.renewProposalsOnPurchase();
-                await this.waitForProposals(engine);
-
-                // Execute trade with NEW proposal
-                const { id: newId, askPrice: newAskPrice } = engine.selectProposal(contract_type);
-                return api_base.api.send({ buy: newId, price: newAskPrice });
-            } else {
-                // Same account (Normal flow or Single-account loss filtering)
-                if (this.vh_variables.mode !== new_mode) {
-                    this.vh_variables.mode = new_mode;
-                    console.log(`[VH] Mode Changed: ${new_mode} (Staying on account ${current_account_id})`);
-                }
-
-                return null;
+                return Promise.resolve(buy_response);
             }
+
+            // REAL Mode: Allow Purchase.js to continue to api.send
+            console.log(`[VH] REAL Mode: Placing real trade on your logged-in account ${api_base.account_id}`);
+            return null;
         } catch (e) {
             console.error('[VH] Error in Virtual Hook logic:', e);
         }
@@ -149,18 +101,83 @@ class VirtualHookManager {
         return null;
     }
 
-    async waitForProposals(engine) {
-        return new Promise(resolve => {
-            const check = () => {
-                const state = engine.store.getState();
-                if (state?.proposalsReady) {
-                    resolve();
-                } else {
-                    setTimeout(check, 200);
-                }
-            };
-            check();
+    async runGhostSimulation(engine, contract_type, proposal, buy_info) {
+        const { contract_id, underlying } = buy_info;
+        const entry_tick = await engine.getLastTick(false);
+        const duration = 5; // Simulation duration in ticks
+        let ticks_count = 0;
+        const start_time = Math.floor(Date.now() / 1000);
+
+        // Inject INITIAL mock message to start UI tracking
+        this.injectMockContract(buy_info, {
+            status: 'open',
+            date_start: start_time,
+            entry_tick,
+            entry_tick_time: start_time,
         });
+
+        const tick_sub = api_base.api.onMessage().subscribe(({ data }) => {
+            if (data.msg_type === 'tick' && data.tick.symbol === underlying) {
+                ticks_count++;
+
+                if (ticks_count >= duration) {
+                    tick_sub.unsubscribe();
+                    const exit_tick = data.tick.quote;
+                    const profit = this.calculateGhostProfit(contract_type, entry_tick, exit_tick);
+
+                    console.log(`[VH] Ghost Trade Result: ${profit > 0 ? 'WON' : 'LOST'} (Entry: ${entry_tick}, Exit: ${exit_tick})`);
+
+                    // Inject FINAL mock message
+                    this.injectMockContract(buy_info, {
+                        status: profit > 0 ? 'won' : 'lost',
+                        profit,
+                        is_completed: true,
+                        is_sold: true,
+                        exit_tick,
+                        exit_tick_time: Math.floor(Date.now() / 1000),
+                    });
+
+                    // Trigger close logic
+                    this.onContractClosed({ profit, is_virtual_hook: true });
+                }
+            }
+        });
+    }
+
+    calculateGhostProfit(type, entry, exit) {
+        if (type.includes('CALL') || type.includes('UP')) {
+            return exit > entry ? 1 : -1;
+        }
+        if (type.includes('PUT') || type.includes('DOWN')) {
+            return exit < entry ? 1 : -1;
+        }
+        // Basic Digits Simulation
+        if (type.includes('DIGIT')) {
+            const last_digit = parseInt(exit.toString().split('').pop());
+            // This is just a placeholder simulation
+            return last_digit % 2 === 0 ? 1 : -1;
+        }
+        return -1;
+    }
+
+    injectMockContract(buy_info, overrides) {
+        const mock_msg = {
+            msg_type: 'proposal_open_contract',
+            proposal_open_contract: {
+                contract_id: buy_info.contract_id,
+                transaction_ids: { buy: buy_info.transaction_id.replace('TX_', '') },
+                buy_price: 0,
+                underlying: buy_info.underlying,
+                contract_type: buy_info.contract_type,
+                currency: 'USD',
+                is_virtual_hook: true,
+                display_name: buy_info.underlying,
+                ...overrides
+            }
+        };
+
+        // Global Injection: Triggers UI updates and store updates
+        api_base.bridge_subject.next(mock_msg);
     }
 
     onContractClosed(contract) {
@@ -171,7 +188,6 @@ class VirtualHookManager {
 
             if (!is_enabled) return;
 
-            // Increment initial count if not started
             if (!this.vh_variables.has_started) {
                 this.vh_variables.initial_trades_count++;
             }
