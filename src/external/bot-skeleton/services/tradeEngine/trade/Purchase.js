@@ -74,12 +74,16 @@ export default Engine =>
 
                 const action = async () => {
                     // VIRTUAL HOOK LOGIC START
+                    console.log(`[Purchase] Intercepting trade for ${contract_type} (Proposal branch)`);
                     const VirtualHookManager = require('../VirtualHookManager').default;
+                    if (!VirtualHookManager) console.error('[Purchase] FAILED TO LOAD VirtualHookManager');
                     const vh_result = await VirtualHookManager.onPurchase(this, contract_type);
 
                     if (vh_result) {
+                        console.log('[Purchase] Trade intercepted by VH Simulation (Proposal branch)');
                         return vh_result;
                     }
+                    console.log('[Purchase] VH gave NULL, proceeding with REAL trade (Proposal branch)');
                     // VIRTUAL HOOK LOGIC END
 
                     return api_base.api.send({ buy: id, price: askPrice });
@@ -121,12 +125,16 @@ export default Engine =>
             const trade_option = tradeOptionToBuy(contract_type, this.tradeOptions);
             const action = async () => {
                 // VIRTUAL HOOK LOGIC START
+                console.log(`[Purchase] Intercepting trade for ${contract_type} (Non-proposal branch)`);
                 const VirtualHookManager = require('../VirtualHookManager').default;
+                if (!VirtualHookManager) console.error('[Purchase] FAILED TO LOAD VirtualHookManager');
                 const vh_result = await VirtualHookManager.onPurchase(this, contract_type);
 
                 if (vh_result) {
+                    console.log('[Purchase] Trade intercepted by VH Simulation (Non-proposal branch)');
                     return vh_result;
                 }
+                console.log('[Purchase] VH gave NULL, proceeding with REAL trade (Non-proposal branch)');
                 // VIRTUAL HOOK LOGIC END
 
                 return api_base.api.send(trade_option);

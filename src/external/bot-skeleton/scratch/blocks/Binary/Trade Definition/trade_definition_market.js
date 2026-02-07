@@ -138,11 +138,22 @@ window.Blockly.Blocks.trade_definition_market = {
             }
         }
 
-        // Sync initial state if needed
+        // Sync state on create
         if (event.type === window.Blockly.Events.BLOCK_CREATE && event.ids.includes(this.id)) {
-            const is_checked = this.getFieldValue('VIRTUAL_HOOK') === 'TRUE';
             if (DBotStore.instance && DBotStore.instance.client) {
-                DBotStore.instance.client.setVirtualHookSettings({ is_enabled: is_checked });
+                const is_checked = this.getFieldValue('VIRTUAL_HOOK') === 'TRUE';
+                const settings = DBotStore.instance.client.virtual_hook_settings;
+
+                // If XML has it, respect it. If XML lacks it, use store default.
+                if (this.getField('VIRTUAL_HOOK') && settings) {
+                    // Logic to avoid overwriting a previous user desire if the XML is old
+                    const has_field_in_xml = event.xml.toString().includes('VIRTUAL_HOOK');
+                    if (!has_field_in_xml && settings.is_enabled) {
+                        this.setFieldValue('TRUE', 'VIRTUAL_HOOK');
+                    } else {
+                        DBotStore.instance.client.setVirtualHookSettings({ is_enabled: is_checked });
+                    }
+                }
             }
         }
     },
