@@ -14,10 +14,25 @@ class VirtualHookManager {
         this.simulations = new Map();
         console.log('[VH] Singleton Ready');
 
+        // Ensure state is clean when bot starts
         globalObserver.register('bot.running', () => {
             const settings = this.getSettings();
             if (settings && settings.is_enabled) {
+                this.reset(); // Reset counters on every bot run
                 globalObserver.emit('ui.log.success', '[Virtual Hook] ACTIVE. Monitoring for pattern.');
+            }
+        });
+
+        // Global watcher for all contract completions (Real and Ghost)
+        globalObserver.register('bot.contract', (contract) => {
+            const settings = this.getSettings();
+            if (!settings || !settings.is_enabled) return;
+
+            // Trigger closure logic when contract is finished
+            if (contract.is_sold || (contract.status && contract.status !== 'open')) {
+                // Prevent duplicate processing if it's already in our simulations map
+                // (though onContractClosed handles this gracefully)
+                this.onContractClosed(contract);
             }
         });
     }
@@ -93,7 +108,7 @@ class VirtualHookManager {
                         contract_id,
                         transaction_id: `GHOST_TX_${Date.now()}`,
                         longcode: `[Simulated] ${proposal?.longcode || contract_type}`,
-                        shortcode: `GHOST_${contract_type}_${underlying}_${Date.now()}_S0P_0`, // ADD DUMMY SHORTCODE
+                        shortcode: `GHOST_${contract_type}_${underlying}_${Date.now()}_S0P_0`,
                         buy_price: 0,
                         is_virtual_hook: true,
                         contract_type,
@@ -156,7 +171,8 @@ class VirtualHookManager {
                         exit_tick_time: Math.floor(Date.now() / 1000),
                     });
 
-                    this.onContractClosed({ profit, is_virtual_hook: true });
+                    // Removed explicit onContractClosed call as the global listener will handle it 
+                    // when OpenContract.js broadcasts the mock contract result.
                 }
             }
         });
@@ -167,10 +183,8 @@ class VirtualHookManager {
         if (type.includes('PUT') || type.includes('DOWN')) return exit < entry ? 1 : -1;
 
         if (type.includes('DIGIT')) {
-            // Robust digit extraction
             const tick_str = (exit || 0).toString();
             const last_digit = parseInt(tick_str.charAt(tick_str.length - 1));
-
             const prediction = proposal?.barrier || proposal?.last_digit_prediction || 0;
             if (type.includes('DIFF')) return last_digit != prediction ? 1 : -1;
             if (type.includes('MATCH')) return last_digit == prediction ? 1 : -1;
@@ -191,7 +205,7 @@ class VirtualHookManager {
                 buy_price: 0,
                 underlying: buy_info.underlying,
                 contract_type: buy_info.contract_type,
-                shortcode: buy_info.shortcode, // ENSURE SHORTCODE IS PASSED
+                shortcode: buy_info.shortcode,
                 currency: 'USD',
                 is_virtual_hook: true,
                 display_name: buy_info.underlying,
@@ -203,6 +217,10 @@ class VirtualHookManager {
 
     onContractClosed(contract) {
         try {
+            // Check if we've already processed this contract to avoid double increments
+            if (this.simulations.has(contract.contract_id)) return;
+            this.simulations.set(contract.contract_id, true);
+
             const settings = this.getSettings();
             if (!settings || !settings.is_enabled) return;
 
@@ -213,7 +231,7 @@ class VirtualHookManager {
 
             let profit = Number(contract.profit);
             if (isNaN(profit)) {
-                profit = Number(contract.sell_price) - Number(contract.buy_price);
+                profit = Number(contract.sell_price || 0) - Number(contract.buy_price || 0);
             }
 
             if (this.vh_variables.mode === 'VIRTUAL') {
@@ -226,6 +244,7 @@ class VirtualHookManager {
                 }
             } else if (this.vh_variables.mode === 'REAL') {
                 this.vh_variables.real_trades_count++;
+                console.log(`[VH] Real trade completed. Count: ${this.vh_variables.real_trades_count}`);
             }
         } catch (e) { }
     }
