@@ -128,6 +128,7 @@ class VirtualHookManager {
         let ticks_count = 0;
         const start_time = Math.floor(Date.now() / 1000);
 
+        // WRAP IN DATA FOR OPENCONTRACT.JS
         this.injectMockContract(buy_info, {
             status: 'open',
             date_start: start_time,
@@ -136,7 +137,9 @@ class VirtualHookManager {
             entry_tick_time: start_time,
         });
 
-        const tick_sub = api_base.api.onMessage().subscribe(({ data }) => {
+        const tick_sub = api_base.api.onMessage().subscribe(({ data: raw_data }) => {
+            // Observe actual tick data which is wrapped in { data } by api-base.ts monkey patch
+            const data = raw_data;
             if (data.msg_type === 'tick' && data.tick.symbol === underlying) {
                 ticks_count++;
                 if (ticks_count >= duration) {
@@ -192,7 +195,8 @@ class VirtualHookManager {
                 ...overrides
             }
         };
-        api_base.bridge_subject.next(mock_msg);
+        // WRAP IN DATA PROPERTY
+        api_base.bridge_subject.next({ data: mock_msg });
     }
 
     onContractClosed(contract) {
