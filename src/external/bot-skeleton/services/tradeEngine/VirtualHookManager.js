@@ -1,5 +1,5 @@
 
-import { api_base } from '../../api/api-base';
+import { api_base } from '../api/api-base';
 
 class VirtualHookManager {
     constructor() {
@@ -14,7 +14,7 @@ class VirtualHookManager {
         try {
             // Need to require here to avoid circular dependencies if any, though likely safe to import at top if DBotStore is structured well.
             // Using require to be safe and consistent with previous code.
-            const DBotStore = require('../../../scratch/dbot-store').default;
+            const DBotStore = require('../../scratch/dbot-store').default;
             const { client } = DBotStore.instance || {};
             const { is_enabled, virtual_trades_condition, real_trades_condition } = client?.virtual_hook_settings || {};
 
@@ -147,7 +147,7 @@ class VirtualHookManager {
         // Actually, we might want to track always or check store.
 
         try {
-            const DBotStore = require('../../../scratch/dbot-store').default;
+            const DBotStore = require('../../scratch/dbot-store').default;
             const { client } = DBotStore.instance || {};
             const { is_enabled } = client?.virtual_hook_settings || {};
 
