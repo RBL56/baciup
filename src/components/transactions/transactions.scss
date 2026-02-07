@@ -191,6 +191,16 @@ $grid-items: (
         @if $item =='stake' or $item =='profit' {
             justify-content: flex-end;
         }
+
+        @if $item =='stake' {
+            &--virtual {
+                color: var(--text-general);
+                opacity: 0.6;
+                font-weight: bold;
+                font-size: 10px;
+                text-transform: uppercase;
+            }
+        }
     }
 }
 

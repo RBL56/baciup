@@ -209,7 +209,11 @@ const Transaction = ({ contract, active_transaction_id, onClickTransaction }: TT
                 </div>
                 <div className='transactions__cell transactions__stake'>
                     {contract ? (
-                        <Money amount={contract.buy_price} currency={contract.currency} show_currency />
+                        contract.is_virtual_hook ? (
+                            <div className='transactions__stake--virtual'>{localize('Virtual')}</div>
+                        ) : (
+                            <Money amount={contract.buy_price} currency={contract.currency} show_currency />
+                        )
                     ) : (
                         <TransactionFieldLoader />
                     )}
