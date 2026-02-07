@@ -6,7 +6,15 @@ const getBotInterface = tradeEngine => {
 
     return {
         init: (...args) => tradeEngine.init(...args),
-        start: (...args) => tradeEngine.start(...args),
+        start: (...args) => {
+            try {
+                const VirtualHookManager = require('../VirtualHookManager').default;
+                VirtualHookManager.reset();
+            } catch (e) {
+                console.error('Failed to reset VirtualHookManager:', e);
+            }
+            return tradeEngine.start(...args);
+        },
         stop: (...args) => tradeEngine.stop(...args),
         purchase: contract_type => tradeEngine.purchase(contract_type),
         getAskPrice: contract_type => Number(getProposal(contract_type, tradeEngine).ask_price),

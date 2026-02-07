@@ -8,7 +8,19 @@ class VirtualHookManager {
             consecutive_losses: 0,
             real_trades_count: 0,
             initial_trades_count: 0,
-            has_started: false
+            has_started: false,
+            session_type: null // 'TESTING' (Demo stays Demo) or 'PRODUCTION' (Demo switches to Real)
+        };
+    }
+
+    reset() {
+        this.vh_variables = {
+            mode: 'VIRTUAL',
+            consecutive_losses: 0,
+            real_trades_count: 0,
+            initial_trades_count: 0,
+            has_started: false,
+            session_type: null
         };
     }
 
@@ -20,7 +32,19 @@ class VirtualHookManager {
 
             if (!is_enabled) return null;
 
-            // 1. Initial Trades Delay logic
+            const accounts = Object.values(client.accounts || {});
+            const virtual_account = accounts.find(a => a.is_virtual);
+            const real_account = accounts.find(a => !a.is_virtual);
+            const current_account_id = api_base.account_id || localStorage.getItem('active_loginid');
+            const current_account = accounts.find(a => a.loginid === current_account_id);
+
+            // 1. Initial Session Detection
+            if (this.vh_variables.session_type === null) {
+                this.vh_variables.session_type = current_account?.is_virtual ? 'TESTING' : 'PRODUCTION';
+                console.log(`[VH] Session Type detected: ${this.vh_variables.session_type} (Starting on ${current_account_id})`);
+            }
+
+            // 2. Initial Trades Delay logic
             const initial_limit = enable_after_initial === 'Immediately' ? 0 : parseInt(enable_after_initial);
             if (!this.vh_variables.has_started) {
                 if (this.vh_variables.initial_trades_count < initial_limit) {
@@ -32,25 +56,24 @@ class VirtualHookManager {
                 }
             }
 
-            const accounts = Object.values(client.accounts || {});
-            const virtual_account = accounts.find(a => a.is_virtual);
-            const real_account = accounts.find(a => !a.is_virtual);
-            const current_account_id = api_base.account_id || localStorage.getItem('active_loginid');
-
             let new_mode = this.vh_variables.mode;
             let target_account = null;
 
-            // 2. Logic: Mode Switching Condition Check
-            // We ONLY check streak conditions if the initial delay has passed
+            // 3. Logic: Mode Switching Condition Check
             if (this.vh_variables.has_started) {
                 if (this.vh_variables.mode === 'VIRTUAL') {
                     if (this.vh_variables.consecutive_losses >= virtual_trades_condition) {
                         console.log(`[VH] Condition met (${virtual_trades_condition} losses). Target REAL mode.`);
                         new_mode = 'REAL';
                         this.vh_variables.real_trades_count = 0;
-                        target_account = real_account || accounts.find(a => a.loginid === current_account_id);
+
+                        if (this.vh_variables.session_type === 'TESTING') {
+                            target_account = virtual_account || current_account;
+                        } else {
+                            target_account = real_account || current_account;
+                        }
                     } else {
-                        target_account = virtual_account || accounts.find(a => a.loginid === current_account_id);
+                        target_account = virtual_account || current_account;
                     }
                 } else {
                     // REAL Mode
@@ -59,24 +82,28 @@ class VirtualHookManager {
                         console.log(`[VH] Real trades limit (${limit}) reached. Returning to VIRTUAL mode.`);
                         new_mode = 'VIRTUAL';
                         this.vh_variables.consecutive_losses = 0;
-                        target_account = virtual_account || accounts.find(a => a.loginid === current_account_id);
+                        target_account = virtual_account || current_account;
                     } else {
-                        target_account = real_account || accounts.find(a => a.loginid === current_account_id);
+                        if (this.vh_variables.session_type === 'TESTING') {
+                            target_account = virtual_account || current_account;
+                        } else {
+                            target_account = real_account || current_account;
+                        }
                     }
                 }
             } else {
                 // During initial delay, ALWAYS target the virtual account to start safely if Virtual Hook is on
-                target_account = virtual_account || accounts.find(a => a.loginid === current_account_id);
+                target_account = virtual_account || current_account;
                 new_mode = 'VIRTUAL';
             }
 
-            // 3. Execution: Determine if a systemic switch is required
+            // 4. Execution: Determine if a systemic switch is required
             const is_different_account = target_account && target_account.loginid !== current_account_id;
 
             if (is_different_account) {
                 console.log(`[VH] Switching account: ${current_account_id} -> ${target_account.loginid}`);
 
-                // CRITICAL: Update token in api_base BEFORE authorizing, otherwise it will re-auth the old account
+                // CRITICAL: Update token in api_base BEFORE authorizing
                 api_base.token = target_account.token;
 
                 // Prepare persistence
