@@ -66,7 +66,7 @@ export const FREE_BOTS: TBotConfig[] = [
     },
     {
         id: 'under_3_bot',
-        name: 'UNDER 3 BOT',
+        name: 'UNDER 3 V1 FAST',
         description: 'Strategy focused on under 3 predictions',
         xml: under3BotXml,
         category: 'Automatic',
