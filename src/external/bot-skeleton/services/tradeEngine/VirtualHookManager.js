@@ -6,143 +6,137 @@ class VirtualHookManager {
         this.vh_variables = {
             mode: 'VIRTUAL', // Start in Virtual
             consecutive_losses: 0,
-            real_trades_count: 0
+            real_trades_count: 0,
+            initial_trades_count: 0,
+            has_started: false
         };
     }
 
     async onPurchase(engine, contract_type) {
         try {
-            // Need to require here to avoid circular dependencies if any, though likely safe to import at top if DBotStore is structured well.
-            // Using require to be safe and consistent with previous code.
             const DBotStore = require('../../scratch/dbot-store').default;
             const { client } = DBotStore.instance || {};
-            const { is_enabled, virtual_trades_condition, real_trades_condition } = client?.virtual_hook_settings || {};
+            const { is_enabled, enable_after_initial, virtual_trades_condition, real_trades_condition } = client?.virtual_hook_settings || {};
 
             if (!is_enabled) return null;
 
-            // Log checking
-            // console.log('[VH] Checking Virtual Hook conditions...');
-
-            const accounts = Object.values(client.accounts);
-            const virtual_account = accounts.find(a => a.is_virtual);
-            const real_account = accounts.find(a => !a.is_virtual);
-
-            if (!virtual_account || !real_account) {
-                console.warn('[VH] Missing Virtual or Real account. Virtual Hook disabled.');
-                return null;
+            // 1. Initial Trades Delay logic
+            if (!this.vh_variables.has_started) {
+                const initial_limit = enable_after_initial === 'Immediately' ? 0 : parseInt(enable_after_initial);
+                if (this.vh_variables.initial_trades_count < initial_limit) {
+                    console.log(`[VH] Waiting for initial trades: ${this.vh_variables.initial_trades_count}/${initial_limit}`);
+                    return null;
+                }
+                this.vh_variables.has_started = true;
+                console.log('[VH] Initial delay finished. Virtual Hook active.');
             }
 
-            let target_token = api_base.token;
-            let should_switch = false;
-            let new_mode = this.vh_variables.mode;
+            const accounts = Object.values(client.accounts || {});
+            const virtual_account = accounts.find(a => a.is_virtual);
+            const real_account = accounts.find(a => !a.is_virtual);
+            const current_account = accounts.find(a => a.loginid === api_base.account_id);
 
-            // LOGIC: Mode Switching
+            let new_mode = this.vh_variables.mode;
+            let target_account = null;
+
+            // 2. Logic: Mode Switching Condition Check
             if (this.vh_variables.mode === 'VIRTUAL') {
-                // Check conditions to switch to REAL
                 if (this.vh_variables.consecutive_losses >= virtual_trades_condition) {
-                    console.log(`[VH] Condition met (${virtual_trades_condition} consecutive losses). Switching to REAL mode.`);
+                    console.log(`[VH] Condition met (${virtual_trades_condition} losses). Target REAL mode.`);
                     new_mode = 'REAL';
                     this.vh_variables.real_trades_count = 0;
-                    target_token = real_account.token;
-                    should_switch = true;
+                    target_account = real_account || current_account; // Use real if available, else stay on current
                 } else {
-                    // Ensure we are on virtual account
-                    if (api_base.account_id !== virtual_account.loginid) {
-                        target_token = virtual_account.token;
-                        should_switch = true;
-                    }
+                    target_account = virtual_account || current_account; // Stay/Switch to Virtual
                 }
             } else {
                 // REAL Mode
-                // Check conditions to switch back to VIRTUAL
                 const limit = real_trades_condition === 'Immediately' ? 1 : parseInt(real_trades_condition);
-
-                // We check if we have completed the required trades
                 if (this.vh_variables.real_trades_count >= limit) {
-                    console.log(`[VH] Real trades limit (${limit}) reached. Switching back to VIRTUAL mode.`);
+                    console.log(`[VH] Real trades limit (${limit}) reached. Returning to VIRTUAL mode.`);
                     new_mode = 'VIRTUAL';
                     this.vh_variables.consecutive_losses = 0;
-                    target_token = virtual_account.token;
-                    should_switch = true;
+                    target_account = virtual_account || current_account;
                 } else {
-                    // Ensure we are on real account
-                    if (api_base.account_id !== real_account.loginid) {
-                        target_token = real_account.token;
-                        should_switch = true;
-                    }
+                    target_account = real_account || current_account;
                 }
             }
 
-            // Execute Switch if needed
-            if (should_switch && target_token) {
-                console.log(`[VH] Switching account to: ${target_token === virtual_account.token ? 'DEMO' : 'REAL'}`);
+            // 3. Execution: Determine if a systemic switch is required
+            const is_different_account = target_account && target_account.loginid !== api_base.account_id;
 
-                // 1. Prepare persistence for the new account
-                const target_loginid = target_token === virtual_account.token ? virtual_account.loginid : real_account.loginid;
-                localStorage.setItem('active_loginid', target_loginid);
-                localStorage.setItem('authToken', target_token);
+            if (is_different_account) {
+                console.log(`[VH] Switching account: ${api_base.account_id} -> ${target_account.loginid}`);
 
-                // 2. Update Client Store (UI) immediately to reflect intention
-                client.setLoginId(target_loginid);
+                // Prepare persistence
+                localStorage.setItem('active_loginid', target_account.loginid);
+                localStorage.setItem('authToken', target_account.token);
+
+                // Update Client Store (UI)
+                client.setLoginId(target_account.loginid);
                 client.setIsLoggedIn(true);
 
-                // 3. Utilize the core API base to handle full re-authorization and subscription refresh
-                // This is the "Deriv API" way to ensure all observables and stores (MobX/Redux) are synced.
+                // Systemic Switch
                 await api_base.authorizeAndSubscribe();
 
-                // 4. Update Engine state to match the new API base state
+                // Sync Engine
                 engine.token = api_base.token;
                 engine.accountInfo = api_base.account_info;
 
-                // 5. Update VH Mode
+                // Sync Mode
                 this.vh_variables.mode = new_mode;
 
-                // 6. Notify UI
-                const account_type = target_loginid.startsWith('CR') ? 'Real' : 'Demo';
-                console.log(`[VH] Switched to ${account_type} (${target_loginid}). Mode: ${new_mode}`);
+                console.log(`[VH] Switched to ${target_account.loginid}. Mode: ${new_mode}`);
 
-                // 7. Refresh Proposals for new account
-                // We MUST have a fresh proposal ID for the new account to avoid InvalidContractProposal errors
+                // Refresh Proposals for NEW account
                 engine.renewProposalsOnPurchase();
-
-                // Wait for proposals to be ready (Redux state)
-                await new Promise(resolve => {
-                    const check = () => {
-                        if (engine.store.getState().proposalsReady) {
-                            resolve();
-                        } else {
-                            setTimeout(check, 200);
-                        }
-                    };
-                    check();
-                });
-
-                // Select new proposal
-                const { id: newId, askPrice: newAskPrice } = engine.selectProposal(contract_type);
+                await this.waitForProposals(engine);
 
                 // Execute trade with NEW proposal
-                // RETURN the trade promise so Purchase.js uses this result
+                const { id: newId, askPrice: newAskPrice } = engine.selectProposal(contract_type);
                 return api_base.api.send({ buy: newId, price: newAskPrice });
+            } else {
+                // Same account (Normal flow or Single-account loss filtering)
+                if (this.vh_variables.mode !== new_mode) {
+                    this.vh_variables.mode = new_mode;
+                    console.log(`[VH] Mode Changed: ${new_mode} (Staying on account ${api_base.account_id})`);
+                }
+
+                return null;
             }
         } catch (e) {
             console.error('[VH] Error in Virtual Hook logic:', e);
         }
 
-        // Return null to indicate no special action was taken, proceed with normal flow
         return null;
     }
 
-    onContractClosed(contract) {
-        // Only track if we have initialized vh_variables (which we have in constructor)
-        // But we should double check if VH is enabled to avoid unnecessary logic? 
-        // Actually, we might want to track always or check store.
+    async waitForProposals(engine) {
+        return new Promise(resolve => {
+            const check = () => {
+                const state = engine.store.getState();
+                if (state?.proposalsReady) {
+                    resolve();
+                } else {
+                    setTimeout(check, 200);
+                }
+            };
+            check();
+        });
+    }
 
+    onContractClosed(contract) {
         try {
             const DBotStore = require('../../scratch/dbot-store').default;
             const { client } = DBotStore.instance || {};
             const { is_enabled } = client?.virtual_hook_settings || {};
 
             if (!is_enabled) return;
+
+            // Increment initial count if not started
+            if (!this.vh_variables.has_started) {
+                this.vh_variables.initial_trades_count++;
+            }
 
             const profit = Number(contract.profit);
             if (this.vh_variables.mode === 'VIRTUAL') {
