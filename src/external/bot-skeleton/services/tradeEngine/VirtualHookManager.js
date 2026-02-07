@@ -1,6 +1,7 @@
 
 import { api_base } from '../api/api-base';
 import { observer as globalObserver } from '../../utils/observer';
+import { generateDerivApiInstance } from '../api/appId';
 
 class VirtualHookManager {
     constructor() {
@@ -12,6 +13,9 @@ class VirtualHookManager {
             has_started: false,
         };
         this.simulations = new Map();
+        this.simulator_api = null;
+        this.simulator_auth_promise = null;
+
         console.log('[VH] Singleton Ready');
 
         globalObserver.register('bot.running', () => {
@@ -20,6 +24,9 @@ class VirtualHookManager {
                 this.reset();
                 const account_label = api_base.account_id?.startsWith('VRT') ? 'Demo' : 'Real';
                 globalObserver.emit('ui.log.success', `[Virtual Hook] ACTIVE on ${account_label} account. Monitoring for pattern.`);
+
+                // Pre-warm simulator connection if we find a demo account
+                this.initSimulator();
             }
         });
 
@@ -53,6 +60,40 @@ class VirtualHookManager {
         }
     }
 
+    getDemoToken() {
+        try {
+            const accounts_list = JSON.parse(localStorage.getItem('accountsList') || '{}');
+            const demo_loginid = Object.keys(accounts_list).find(id => id.startsWith('VRT'));
+            return demo_loginid ? accounts_list[demo_loginid] : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    async initSimulator() {
+        const token = this.getDemoToken();
+        if (!token) return null;
+
+        if (this.simulator_api) return this.simulator_api;
+
+        console.log('[VH] Initializing background simulator session...');
+        this.simulator_api = generateDerivApiInstance();
+
+        // Handle autorization
+        this.simulator_auth_promise = this.simulator_api.authorize(token)
+            .then(response => {
+                console.log('[VH] Simulator Session Authorized:', response.authorize.loginid);
+                return true;
+            })
+            .catch(e => {
+                console.error('[VH] Simulator Auth Error:', e);
+                this.simulator_api = null;
+                return false;
+            });
+
+        return this.simulator_api;
+    }
+
     async onPurchase(engine, contract_type) {
         const settings = this.getSettings();
         if (!settings || !settings.is_enabled) return null;
@@ -72,7 +113,7 @@ class VirtualHookManager {
                     return null;
                 } else {
                     this.vh_variables.has_started = true;
-                    globalObserver.emit('ui.log.success', '[Virtual Hook] ACTIVATED. Starting bot simulation (Ghost trades).');
+                    globalObserver.emit('ui.log.success', '[Virtual Hook] ACTIVATED. Starting bot simulation.');
                 }
             }
 
@@ -100,12 +141,38 @@ class VirtualHookManager {
                 const underlying = proposal?.underlying || engine.tradeOptions?.symbol || engine.symbol;
                 if (!underlying) return null;
 
+                // Prepare Simulator buy request if demo account is active
+                const simulator_token = this.getDemoToken();
+                if (simulator_token && this.simulator_api) {
+                    await this.simulator_auth_promise;
+
+                    globalObserver.emit('ui.log.notify', `[Virtual Hook] Simulator: Placing accurate ${contract_type} on background Demo...`);
+                    this.runSimulatorTrade(this.simulator_api, contract_type, proposal);
+
+                    // Return a fake response to satisfy the engine while we trade in background
+                    const contract_id = `GHOST_${Date.now()}`;
+                    return Promise.resolve({
+                        buy: {
+                            contract_id,
+                            transaction_id: `GHOST_TX_${Date.now()}`,
+                            longcode: `[API Simulated] ${proposal?.longcode || contract_type}`,
+                            shortcode: `GHOST_${contract_type}_${underlying}_${Date.now()}_S0P_0`,
+                            buy_price: 0,
+                            is_virtual_hook: true,
+                            contract_type,
+                            underlying,
+                            currency: 'USD'
+                        }
+                    });
+                }
+
+                // Fallback to tick simulation
                 const contract_id = `GHOST_${Date.now()}`;
                 const buy_response = {
                     buy: {
                         contract_id,
                         transaction_id: `GHOST_TX_${Date.now()}`,
-                        longcode: `[Simulated] ${proposal?.longcode || contract_type}`,
+                        longcode: `[Tick Simulated] ${proposal?.longcode || contract_type}`,
                         shortcode: `GHOST_${contract_type}_${underlying}_${Date.now()}_S0P_0`,
                         buy_price: 0,
                         is_virtual_hook: true,
@@ -115,7 +182,7 @@ class VirtualHookManager {
                     }
                 };
 
-                globalObserver.emit('ui.log.notify', `[Virtual Hook] Simulator: Placing ghost ${contract_type}...`);
+                globalObserver.emit('ui.log.notify', `[Virtual Hook] Simulator: Placing tick ghost ${contract_type}...`);
                 this.runGhostSimulation(engine, contract_type, proposal, buy_response.buy);
                 return Promise.resolve(buy_response);
             }
@@ -127,6 +194,49 @@ class VirtualHookManager {
             console.error('[VH] onPurchase Error:', e);
         }
         return null;
+    }
+
+    async runSimulatorTrade(api, contract_type, proposal) {
+        if (!proposal) return;
+
+        try {
+            const buy_req = {
+                buy: proposal.id,
+                price: proposal.ask_price || 0
+            };
+
+            const buy_response = await api.send(buy_req);
+            const { contract_id } = buy_response.buy;
+
+            // Subscribe to this background contract
+            api.onMessage().subscribe(({ data: raw_data }) => {
+                const data = raw_data;
+                if (data.msg_type === 'proposal_open_contract') {
+                    const contract = data.proposal_open_contract;
+                    if (contract.contract_id !== contract_id) return;
+
+                    // Inject updates into the main bridge so the user sees progress
+                    this.injectSimulatorContract(contract);
+
+                    // We don't need to manually check win/loss because the global observer
+                    // in the main session doesn't see these background messages.
+                    // But we DO need to update our internal logic when it finishes.
+                    if (contract.is_sold || (contract.status && contract.status !== 'open')) {
+                        // The background API gets the real profit/loss
+                        this.onContractClosed({
+                            ...contract,
+                            is_virtual_hook: true
+                        });
+                    }
+                }
+            });
+
+            // Start subscription
+            api.send({ proposal_open_contract: 1, contract_id, subscribe: 1 });
+
+        } catch (e) {
+            console.error('[VH] Simulator Trade Error:', e);
+        }
     }
 
     async runGhostSimulation(engine, contract_type, proposal, buy_info) {
@@ -189,6 +299,18 @@ class VirtualHookManager {
             if (type.includes('ODD')) return last_digit % 2 !== 0 ? 1 : -1;
         }
         return -1;
+    }
+
+    injectSimulatorContract(contract) {
+        const mock_msg = {
+            msg_type: 'proposal_open_contract',
+            proposal_open_contract: {
+                ...contract,
+                is_virtual_hook: true,
+                buy_price: 0, // Keep UI showing 0 stake for simulation
+            }
+        };
+        api_base.bridge_subject.next({ data: mock_msg });
     }
 
     injectMockContract(buy_info, overrides) {
