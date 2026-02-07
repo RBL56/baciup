@@ -50,7 +50,7 @@ class CopyTradingService {
     private recentTxIds = new Set<string>();
     private lastRequestTime = 0;
     private readonly MIN_DELAY_MS = 600;
-    private readonly WS_URL = 'wss://ws.derivws.com/websockets/v3?app_id=120181';
+    private readonly WS_URL = 'wss://ws.derivws.com/websockets/v3?app_id=106684';
     private notificationCallback: NotificationCallback | null = null;
 
     private constructor() {

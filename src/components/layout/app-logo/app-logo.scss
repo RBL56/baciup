@@ -46,4 +46,13 @@
             font-size: 10px;
         }
     }
+
+    &__chat-icon {
+        flex-shrink: 0;
+
+        @include mobile-or-tablet-screen {
+            width: 14px;
+            height: 14px;
+        }
+    }
 }

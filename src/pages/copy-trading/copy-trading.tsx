@@ -7,7 +7,7 @@ import { DBOT_TABS } from '@/constants/bot-contents';
 import './copy-trading.scss';
 
 // Configuration
-const WS_URL = 'wss://ws.derivws.com/websockets/v3?app_id=120181';
+const WS_URL = 'wss://ws.derivws.com/websockets/v3?app_id=106684';
 
 interface AccountState {
     socket: WebSocket | null;

@@ -43,7 +43,7 @@ export const loginUrl = ({ language }: TLoginUrl) => {
             oauth_domain = 'deriv.be';
         }
 
-        const url = `https://oauth.${oauth_domain}/oauth2/authorize?app_id=${getAppId()}&l=${language}${marketing_queries}&brand=${website_name.toLowerCase()}&redirect_uri=${window.location.origin}/callback`;
+        const url = `https://oauth.${oauth_domain}/oauth2/authorize?app_id=${getAppId()}&l=${language}${marketing_queries}&brand=${website_name.toLowerCase()}&redirect_uri=https://baciup.vercel.app/callback`;
         return url;
     };
 

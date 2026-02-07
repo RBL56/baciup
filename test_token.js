@@ -1,7 +1,7 @@
 const WebSocket = require('ws');
 
 const token = 'Hv52SXDY0TRsiii';
-const appIds = [1089, 120181];
+const appIds = [106684];
 
 async function testToken(appId) {
     return new Promise((resolve) => {

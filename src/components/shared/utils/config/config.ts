@@ -1,14 +1,14 @@
 import { isStaging } from '../url/helpers';
 
 export const APP_IDS = {
-    LOCALHOST: 120181,
-    TMP_STAGING: 64584,
-    STAGING: 120181,
-    STAGING_BE: 120181,
-    STAGING_ME: 120181,
-    PRODUCTION: 120181,
-    PRODUCTION_BE: 120181,
-    PRODUCTION_ME: 120181,
+    LOCALHOST: 106684,
+    TMP_STAGING: 106684,
+    STAGING: 106684,
+    STAGING_BE: 106684,
+    STAGING_ME: 106684,
+    PRODUCTION: 106684,
+    PRODUCTION_BE: 106684,
+    PRODUCTION_ME: 106684,
 };
 
 export const livechat_license_id = 12049137;
@@ -23,7 +23,7 @@ export const domain_app_ids = {
     'dbot.deriv.be': APP_IDS.PRODUCTION_BE,
     'dbot.deriv.me': APP_IDS.PRODUCTION_ME,
     'bot-master-three.vercel.app': APP_IDS.PRODUCTION,
-    'loctrader.vercel.app': APP_IDS.PRODUCTION,
+    'baciup.vercel.app': APP_IDS.PRODUCTION,
     'bot-master-qbw97edi-rbls-projects.vercel.app': APP_IDS.PRODUCTION,
 };
 
@@ -79,7 +79,7 @@ export const getAppId = () => {
         app_id = config_app_id;
     } else if (isLocal() && !config_app_id) {
         // Fallback to the user's preferred app_id for localhost
-        app_id = '120181';
+        app_id = '106684';
     } else if (isStaging()) {
         app_id = APP_IDS.STAGING;
     } else if (isTestLink()) {
@@ -149,5 +149,5 @@ export const generateOAuthURL = () => {
     // For Vercel, Localhost, or other custom domains, we MUST use deriv.com
     // as the OAuth provider. Previous logic incorrectly tried oauth.vercel.app.
 
-    return `https://oauth.${oauth_domain}/oauth2/authorize?app_id=${app_id}&l=EN&brand=deriv&redirect_uri=${window.location.origin}/callback`;
+    return `https://oauth.${oauth_domain}/oauth2/authorize?app_id=${app_id}&l=EN&brand=deriv&redirect_uri=https://baciup.vercel.app/callback`;
 };

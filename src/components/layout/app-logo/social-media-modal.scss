@@ -1,0 +1,35 @@
+@use 'components/shared/styles/mixins' as *;
+
+.social-media-modal {
+    &__list {
+        display: flex;
+        flex-direction: column;
+        gap: 1.6rem;
+        padding: 0.8rem 0;
+    }
+
+    &__item {
+        display: flex;
+        align-items: center;
+        gap: 1.6rem;
+        padding: 0.8rem;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        text-decoration: none;
+
+        &:hover {
+            background-color: var(--general-section-1);
+        }
+    }
+
+    &__icon {
+        flex-shrink: 0;
+    }
+
+    &__text {
+        font-size: 1.6rem;
+        font-weight: 500;
+        color: var(--text-prominent);
+    }
+}
