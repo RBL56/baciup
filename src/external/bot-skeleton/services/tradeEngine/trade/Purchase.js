@@ -77,64 +77,104 @@ export default Engine =>
                     try {
                         const DBotStore = require('../../../scratch/dbot-store').default;
                         const { client } = DBotStore.instance || {};
-                        const vh_settings = client?.virtual_hook_settings;
+                        const { is_enabled, virtual_trades_condition, real_trades_condition } = client?.virtual_hook_settings || {};
 
-                        if (vh_settings?.is_enabled) {
+                        if (is_enabled) {
                             // Initialize VH state if not present
-                            if (!this.vh_state) {
-                                this.vh_state = {
+                            if (!this.vh_variables) {
+                                this.vh_variables = {
                                     mode: 'VIRTUAL', // Start in Virtual
                                     consecutive_losses: 0,
                                     real_trades_count: 0
                                 };
                             }
 
-                            const is_virtual_token = (token) => {
-                                // Simple check: demo tokens usually start with 'V' or account starts with 'VR'
-                                // Better: Find account in client.accounts and check is_virtual
-                                const loginid = Object.keys(client.accounts).find(id => client.accounts[id].token === token);
-                                return client.accounts[loginid]?.is_virtual;
-                            };
-
-                            const current_token = api_base.token;
                             const accounts = Object.values(client.accounts);
                             const virtual_account = accounts.find(a => a.is_virtual);
                             const real_account = accounts.find(a => !a.is_virtual);
 
-                            let target_token = current_token;
-
-                            // LOGIC: Mode Switching
-                            if (this.vh_state.mode === 'VIRTUAL') {
-                                // Check conditions to switch to REAL
-                                if (this.vh_state.consecutive_losses >= vh_settings.virtual_trades_condition) {
-                                    console.log('[VH] Condition met! Switching to REAL mode.');
-                                    this.vh_state.mode = 'REAL';
-                                    this.vh_state.real_trades_count = 0;
-                                    target_token = real_account?.token;
-                                } else {
-                                    target_token = virtual_account?.token;
-                                }
+                            if (!virtual_account || !real_account) {
+                                console.warn('[VH] Missing Virtual or Real account. Virtual Hook disabled.');
                             } else {
-                                // REAL Mode
-                                // Check conditions to switch back to VIRTUAL
-                                const limit = vh_settings.real_trades_condition === 'Immediately' ? 1 : parseInt(vh_settings.real_trades_condition);
-                                if (this.vh_state.real_trades_count >= limit) {
-                                    console.log('[VH] Real trades done. Switching back to VIRTUAL mode.');
-                                    this.vh_state.mode = 'VIRTUAL';
-                                    this.vh_state.consecutive_losses = 0;
-                                    target_token = virtual_account?.token;
-                                } else {
-                                    target_token = real_account?.token;
-                                }
-                            }
+                                let target_token = api_base.token;
+                                let should_switch = false;
+                                let new_mode = this.vh_variables.mode;
 
-                            // Execute Switch
-                            if (target_token && target_token !== current_token) {
-                                console.log(`[VH] Switching token to: ${target_token}`);
-                                await api_base.api.authorize(target_token);
-                                // Update client store to reflect active account UI
-                                const new_loginid = Object.keys(client.accounts).find(id => client.accounts[id].token === target_token);
-                                if (new_loginid) client.setLoginId(new_loginid);
+                                // LOGIC: Mode Switching
+                                if (this.vh_variables.mode === 'VIRTUAL') {
+                                    // Check conditions to switch to REAL
+                                    if (this.vh_variables.consecutive_losses >= virtual_trades_condition) {
+                                        console.log(`[VH] Condition met (${virtual_trades_condition} consecutive losses). Switching to REAL mode.`);
+                                        new_mode = 'REAL';
+                                        this.vh_variables.real_trades_count = 0;
+                                        target_token = real_account.token;
+                                        should_switch = true;
+                                    } else {
+                                        // Ensure we are on virtual account
+                                        if (api_base.account_id !== virtual_account.loginid) {
+                                            target_token = virtual_account.token;
+                                            should_switch = true;
+                                        }
+                                    }
+                                } else {
+                                    // REAL Mode
+                                    // Check conditions to switch back to VIRTUAL
+                                    const limit = real_trades_condition === 'Immediately' ? 1 : parseInt(real_trades_condition);
+
+                                    // We check if we have completed the required trades
+                                    if (this.vh_variables.real_trades_count >= limit) {
+                                        console.log(`[VH] Real trades limit (${limit}) reached. Switching back to VIRTUAL mode.`);
+                                        new_mode = 'VIRTUAL';
+                                        this.vh_variables.consecutive_losses = 0;
+                                        target_token = virtual_account.token;
+                                        should_switch = true;
+                                    } else {
+                                        // Ensure we are on real account
+                                        if (api_base.account_id !== real_account.loginid) {
+                                            target_token = real_account.token;
+                                            should_switch = true;
+                                        }
+                                    }
+                                }
+
+                                // Execute Switch if needed
+                                if (should_switch && target_token) {
+                                    console.log(`[VH] Switching account to: ${target_token === virtual_account.token ? 'DEMO' : 'REAL'}`);
+
+                                    // 1. Authorize
+                                    const auth_res = await api_base.api.authorize(target_token);
+
+                                    if (auth_res.authorize) {
+                                        const { loginid, balance, currency } = auth_res.authorize;
+
+                                        // 2. Update API Base state
+                                        api_base.token = target_token;
+                                        api_base.account_id = loginid;
+                                        api_base.account_info = auth_res.authorize;
+
+                                        // 3. Update Client Store (UI)
+                                        client.setLoginId(loginid);
+                                        client.setBalance(balance);
+                                        client.setCurrency(currency);
+                                        client.setIsLoggedIn(true);
+
+                                        // Persist active loginid
+                                        localStorage.setItem('active_loginid', loginid);
+                                        localStorage.setItem('authToken', target_token);
+
+                                        // 4. Refresh Subscriptions for new account (important for balance updates)
+                                        // We need to re-subscribe to balance/transaction/proposals for the new account
+                                        api_base.unsubscribeAllSubscriptions();
+                                        await api_base.subscribe();
+
+                                        // 5. Update VH Mode
+                                        this.vh_variables.mode = new_mode;
+
+                                        // 6. Notify UI
+                                        const account_type = loginid.startsWith('CR') ? 'Real' : 'Demo';
+                                        console.log(`[VH] Switched to ${account_type} (${loginid}). Mode: ${new_mode}`);
+                                    }
+                                }
                             }
                         }
                     } catch (e) {

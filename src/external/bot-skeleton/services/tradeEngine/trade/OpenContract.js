@@ -60,19 +60,19 @@ export default Engine =>
                         });
 
                         // VIRTUAL HOOK LOGIC START
-                        if (this.vh_state) {
+                        if (this.vh_variables) {
                             const profit = Number(contract.profit);
-                            if (this.vh_state.mode === 'VIRTUAL') {
+                            if (this.vh_variables.mode === 'VIRTUAL') {
                                 if (profit < 0) {
-                                    this.vh_state.consecutive_losses++;
-                                    console.log(`[VH] Virtual Loss. Total: ${this.vh_state.consecutive_losses}`);
-                                } else {
-                                    this.vh_state.consecutive_losses = 0;
+                                    this.vh_variables.consecutive_losses++;
+                                    console.log(`[VH] Virtual Loss. Total Consecutive: ${this.vh_variables.consecutive_losses}`);
+                                } else if (profit > 0) {
+                                    this.vh_variables.consecutive_losses = 0;
                                     console.log(`[VH] Virtual Win. Counter reset.`);
                                 }
-                            } else if (this.vh_state.mode === 'REAL') {
-                                this.vh_state.real_trades_count++;
-                                console.log(`[VH] Real Trade. Total: ${this.vh_state.real_trades_count}`);
+                            } else if (this.vh_variables.mode === 'REAL') {
+                                this.vh_variables.real_trades_count++;
+                                console.log(`[VH] Real Trade. Total: ${this.vh_variables.real_trades_count}`);
                             }
                         }
                         // VIRTUAL HOOK LOGIC END
