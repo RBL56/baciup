@@ -1,0 +1,75 @@
+<xml xmlns="http://www.w3.org/1999/xhtml" collection="false" is_dbot="true">
+  <variables>
+    <variable type="" id="martingale:initialStake">martingale:initialStake</variable>
+    <variable type="" id="martingale:totalProfit">martingale:totalProfit</variable>
+    <variable type="" id="martingale:profitThreshold">martingale:profitThreshold</variable>
+    <variable type="" id="martingale:lossThreshold">martingale:lossThreshold</variable>
+    <variable type="" id="martingale:size">martingale:size</variable>
+    <variable type="" id="martingale:multiplier">martingale:multiplier</variable>
+    <variable type="" id="martingale:tradeAgain">martingale:tradeAgain</variable>
+  </variables>
+  <block type="trade_definition" id="trade_definition_block" x="0" y="0">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="market_block" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ10V</field>
+        <next>
+          <block type="trade_definition_tradetype" id="tradetype_block" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">callput</field>
+            <field name="TRADETYPE_LIST">callput</field>
+            <next>
+              <block type="trade_definition_contracttype" id="contracttype_block" deletable="false" movable="false">
+                <field name="TYPE_LIST">both</field>
+                <next>
+                  <block type="trade_definition_candleinterval" id="candleinterval_block" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
+                    <next>
+                      <block type="trade_definition_restartbuysell" id="restartbuysell_block" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                        <next>
+                          <block type="trade_definition_restartonerror" id="restartonerror_block" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="SUBMARKET">
+      <block type="trade_definition_tradeoptions" id="tradeoptions_block">
+        <mutation has_first_barrier="false" has_second_barrier="false" has_prediction="false"></mutation>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <field name="CURRENCY_LIST">USD</field>
+        <value name="DURATION">
+          <shadow type="math_number" id="duration_shadow">
+            <field name="NUM">5</field>
+          </shadow>
+        </value>
+        <value name="AMOUNT">
+          <shadow type="math_number" id="amount_shadow">
+            <field name="NUM">1</field>
+          </shadow>
+        </value>
+      </block>
+    </statement>
+  </block>
+  <block type="before_purchase" id="before_purchase_block" x="0" y="500">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="purchase" id="purchase_block">
+        <field name="PURCHASE_LIST">CALL</field>
+      </block>
+    </statement>
+  </block>
+  <block type="after_purchase" id="after_purchase_block" x="600" y="0">
+    <statement name="AFTERPURCHASE_STACK">
+      <block type="trade_again" id="trade_again_block"></block>
+    </statement>
+  </block>
+</xml>

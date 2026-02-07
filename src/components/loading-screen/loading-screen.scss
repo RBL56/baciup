@@ -1,0 +1,167 @@
+.loading-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: radial-gradient(circle at center, #1a2a4a 0%, #050a1a 100%);
+    z-index: 9999;
+    overflow: hidden;
+    color: #ffffff;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+
+    &__background {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1;
+        pointer-events: none;
+    }
+
+    &__bg-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMSIgY3k9IjEiIHI9IjEiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMC4wNSkiLz48L3N2Zz4=');
+        opacity: 0.2;
+        z-index: 2;
+    }
+
+    &__bg-logo {
+        width: 120%;
+        height: auto;
+        opacity: 0.15;
+        filter: blur(80px);
+        transform: rotate(-15deg) scale(1.1);
+        z-index: 1;
+    }
+
+    &__content {
+        position: relative;
+        z-index: 10;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 90%;
+        max-width: 600px;
+        padding: 60px 40px;
+        background: rgba(20, 40, 100, 0.4);
+        backdrop-filter: blur(25px);
+        -webkit-backdrop-filter: blur(25px);
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 40px rgba(0, 100, 255, 0.1);
+        text-align: center;
+    }
+
+    &__title {
+        font-size: 32px;
+        font-weight: 800;
+        letter-spacing: 4px;
+        margin-bottom: 32px;
+        text-transform: uppercase;
+        background: linear-gradient(to bottom, #ffffff 0%, #a0c4ff 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+    }
+
+    &__subtitle {
+        font-size: 18px;
+        font-weight: 400;
+        color: rgba(255, 255, 255, 0.9);
+        margin-bottom: 40px;
+        letter-spacing: 2px;
+    }
+
+    &__status-container {
+        margin-bottom: 12px;
+    }
+
+    &__status {
+        font-size: 14px;
+        font-weight: 700;
+        color: rgba(255, 255, 255, 0.9);
+        letter-spacing: 1px;
+    }
+
+    &__loader-container {
+        width: 100%;
+        max-width: 500px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+    }
+
+    &__progress-bar {
+        width: 100%;
+        height: 10px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 5px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    &__progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #00d2ff 0%, #3a7bd5 100%);
+        border-radius: 5px;
+        transition: width 0.4s cubic-bezier(0.1, 0.7, 1.0, 0.1);
+        box-shadow: 0 0 15px rgba(0, 210, 255, 0.5);
+    }
+
+    &__percentage {
+        font-size: 12px;
+        font-weight: 600;
+        color: rgba(255, 255, 255, 0.8);
+        letter-spacing: 1px;
+    }
+
+    @media (max-width: 600px) {
+        &__content {
+            padding: 40px 20px;
+        }
+
+        &__title {
+            font-size: 22px;
+            letter-spacing: 2px;
+            margin-bottom: 20px;
+        }
+
+        &__subtitle {
+            font-size: 14px;
+            letter-spacing: 1px;
+            margin-bottom: 30px;
+        }
+    }
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+        opacity: 0.4;
+    }
+
+    70% {
+        transform: scale(1.4);
+        opacity: 0;
+    }
+
+    100% {
+        transform: scale(1.4);
+        opacity: 0;
+    }
+}

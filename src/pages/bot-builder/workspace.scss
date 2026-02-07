@@ -1,0 +1,57 @@
+@use 'components/shared/styles/constants' as *;
+@use 'components/shared/styles/devices' as *;
+
+#scratch_div {
+    position: relative;
+    width: calc(100vw - 3.2rem);
+    height: var(--bot-content-height);
+    top: 0;
+
+    @include mobile-or-tablet-screen {
+        width: 100%;
+    }
+}
+
+.blocklyText.blocklyTextRootBlockHeader {
+    font-size: calc(var(--text-size-sm) * 0.9);
+    font-weight: normal;
+    font-stretch: normal;
+    font-style: normal;
+    line-height: 1.43;
+    letter-spacing: normal;
+    fill: $color-white;
+}
+
+.blocklyMainWorkspaceScrollbar {
+    display: none;
+}
+
+.injectionDiv {
+    height: calc(100vh - 16.4rem);
+    position: relative;
+    touch-action: none;
+    overflow: hidden;
+}
+
+/* Blockly Input Overrides for Theme Awareness */
+.blocklyEditableText {
+    &>rect {
+        fill: var(--fill-normal) !important;
+        rx: 15px; // Rounded corners for pill shape
+        ry: 15px;
+        stroke: none;
+        height: 30px !important;
+        y: 0 !important;
+    }
+
+    &>text {
+        fill: var(--text-prominent) !important;
+        font-family: 'Inter', sans-serif; // Assuming Inter is available, strictly matching screenshot
+        font-weight: bold;
+        transform: translate(0, 2px); // Slight adjustment for centering
+    }
+}
+
+.blocklyDropdownText {
+    fill: var(--text-prominent) !important;
+}

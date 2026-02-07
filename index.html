@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en" dir="auto">
+
+<head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/jpeg" href="/images/loco-logo.jpg" />
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#BF00FF" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="LOCO THE TRADER" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="msapplication-TileColor" content="#BF00FF" />
+    <meta name="msapplication-tap-highlight" content="no" />
+
+    <!-- Apple Touch Icons -->
+    <link rel="apple-touch-icon" href="/assets/icons/pwa/icon-152x152.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/assets/icons/pwa/icon-152x152.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/icons/pwa/icon-192x192.png" />
+    <meta name="title" content="Build a trading bot without coding | Deriv Bot." />
+    <meta name="description"
+        content="Import your current bot or learn how to create a trading bot from scratch with our detailed guides, FAQs, and tutorials. Start with a quick strategy!" />
+    <meta property="og:title" content="Deriv Bot" />
+    <meta property="og:description"
+        content="Import your current bot or learn how to create a trading bot from scratch with our detailed guides, FAQs, and tutorials. Start with a quick strategy!" />
+    <title>Build a trading bot without coding | Deriv Bot.</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <style>
+        :root {
+            font-size: 62.5%;
+        }
+
+        .initial-loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: radial-gradient(circle at center, #1a2a4a 0%, #050a1a 100%);
+            z-index: 9999;
+            overflow: hidden;
+            color: #ffffff;
+            font-family:
+                'Inter',
+                -apple-system,
+                BlinkMacSystemFont,
+                'Segoe UI',
+                Roboto,
+                Oxygen,
+                Ubuntu,
+                Cantarell,
+                'Open Sans',
+                'Helvetica Neue',
+                sans-serif;
+        }
+
+        .initial-loader__content {
+            position: relative;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 90%;
+            max-width: 600px;
+            padding: 60px 40px;
+            background: rgba(20, 40, 100, 0.4);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow:
+                0 25px 50px -12px rgba(0, 0, 0, 0.5),
+                0 0 40px rgba(0, 100, 255, 0.1);
+            text-align: center;
+        }
+
+        .initial-loader__title {
+            font-size: 32px;
+            font-weight: 800;
+            letter-spacing: 4px;
+            margin-bottom: 32px;
+            text-transform: uppercase;
+            color: #ffffff;
+        }
+
+        .initial-loader__subtitle {
+            font-size: 18px;
+            font-weight: 400;
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 40px;
+            letter-spacing: 2px;
+        }
+
+        .initial-loader__progress-bar {
+            width: 100%;
+            max-width: 500px;
+            height: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        @media (max-width: 600px) {
+            .initial-loader__title {
+                font-size: 22px;
+                letter-spacing: 2px;
+                margin-bottom: 20px;
+            }
+
+            .initial-loader__subtitle {
+                font-size: 14px;
+                letter-spacing: 1px;
+                margin-bottom: 30px;
+            }
+
+            .initial-loader__content {
+                padding: 40px 20px;
+            }
+        }
+    </style>
+</head>
+
+<body class="body theme theme--light">
+    <div id="modal_root" class="modal-root"></div>
+    <div id="popup_root" class="popup-root"></div>
+    <div id="root">
+        <div class="initial-loader">
+            <div class="initial-loader__background" style="
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        z-index: 1;
+                        pointer-events: none;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                    ">
+                <img src="/images/loco-logo.png" alt="Background Logo" style="
+                            width: 120%;
+                            height: auto;
+                            opacity: 0.15;
+                            filter: blur(80px);
+                            transform: rotate(-15deg) scale(1.1);
+                        " />
+            </div>
+            <div class="initial-loader__content">
+                <img src="/images/loco-logo.jpg" alt="LOCO THE TRADER" style="
+                            width: 80px;
+                            height: 80px;
+                            border-radius: 12px;
+                            margin-bottom: 24px;
+                            object-fit: cover;
+                            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+                        " />
+                <h1 class="initial-loader__title">LOCO THE TRADER</h1>
+                <p class="initial-loader__subtitle">Welcome to Loco the Trader</p>
+                <div class="initial-loader__progress-bar"></div>
+            </div>
+        </div>
+    </div>
+    <!-- LiveChat script -->
+    <script type="text/javascript" defer>
+        window.__lc = window.__lc || {};
+        window.__lc.license = 12049137;
+        window.__lc.asyncInit = true;
+        (function (n, t, c) {
+            function i(n) {
+                return e._h ? e._h.apply(null, n) : e._q.push(n);
+            }
+            var e = {
+                _q: [],
+                _h: null,
+                _v: '2.0',
+                on: function () {
+                    i(['on', c.call(arguments)]);
+                },
+                once: function () {
+                    i(['once', c.call(arguments)]);
+                },
+                off: function () {
+                    i(['off', c.call(arguments)]);
+                },
+                get: function () {
+                    if (!e._h) throw new Error('[LiveChatWidget] You can’t use getters before load.');
+                    return i(['get', c.call(arguments)]);
+                },
+                call: function () {
+                    i(['call', c.call(arguments)]);
+                },
+                init: function () {
+                    setTimeout(() => {
+                        var n = t.createElement('script');
+                        ((n.async = !0),
+                            (n.type = 'text/javascript'),
+                            (n.src = 'https://cdn.livechatinc.com/tracking.js'),
+                            t.head.appendChild(n));
+                    }, 3000);
+                },
+            };
+            (!n.__lc.asyncInit && e.init(), (n.LiveChatWidget = n.LiveChatWidget || e));
+        })(window, document, [].slice);
+    </script>
+    <!-- End LiveChat script -->
+
+    <!-- Browser Service Worker Prevention -->
+    <script>
+        // Check browser compatibility and prevent service worker issues
+        const userAgent = navigator.userAgent.toLowerCase();
+        const isFirefox = userAgent.includes('firefox');
+        const isSafari = userAgent.includes('safari') && !userAgent.includes('chrome');
+        const shouldSkipSW = isFirefox || isSafari;
+
+        if (shouldSkipSW) {
+            const browserName = isFirefox ? 'Firefox' : 'Safari';
+            console.log(
+                `[HTML] ${browserName} detected - preventing service worker registration to avoid chunk loading issues`
+            );
+
+            // Cleanup any existing service workers
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker
+                    .getRegistrations()
+                    .then(registrations => {
+                        registrations.forEach(registration => {
+                            console.log(`[HTML] Unregistering existing SW for ${browserName}:`, registration.scope);
+                            registration.unregister();
+                        });
+                    })
+                    .catch(error => {
+                        console.error('[HTML] Failed to cleanup service workers:', error);
+                    });
+            }
+        }
+
+        // Check online/offline status
+        console.log('[HTML] Online status:', navigator.onLine);
+        window.addEventListener('online', () => {
+            console.log('[HTML] Back online');
+        });
+        window.addEventListener('offline', () => {
+            console.log('[HTML] Gone offline');
+        });
+
+        // Listen for service worker messages if registered by PWA utils (non-problematic browsers only)
+        if ('serviceWorker' in navigator && !shouldSkipSW) {
+            navigator.serviceWorker.addEventListener('message', event => {
+                console.log('[HTML] Message from service worker:', event.data);
+            });
+        }
+    </script>
+</body>
+
+</html>
