@@ -77,61 +77,52 @@ class VirtualHookManager {
             if (should_switch && target_token) {
                 console.log(`[VH] Switching account to: ${target_token === virtual_account.token ? 'DEMO' : 'REAL'}`);
 
-                // 1. Authorize
-                const auth_res = await api_base.api.authorize(target_token);
+                // 1. Prepare persistence for the new account
+                const target_loginid = target_token === virtual_account.token ? virtual_account.loginid : real_account.loginid;
+                localStorage.setItem('active_loginid', target_loginid);
+                localStorage.setItem('authToken', target_token);
 
-                if (auth_res.authorize) {
-                    const { loginid, balance, currency } = auth_res.authorize;
+                // 2. Update Client Store (UI) immediately to reflect intention
+                client.setLoginId(target_loginid);
+                client.setIsLoggedIn(true);
 
-                    // 2. Update API Base state
-                    api_base.token = target_token;
-                    api_base.account_id = loginid;
-                    api_base.account_info = auth_res.authorize;
+                // 3. Utilize the core API base to handle full re-authorization and subscription refresh
+                // This is the "Deriv API" way to ensure all observables and stores (MobX/Redux) are synced.
+                await api_base.authorizeAndSubscribe();
 
-                    // 3. Update Client Store (UI)
-                    client.setLoginId(loginid);
-                    client.setBalance(balance);
-                    client.setCurrency(currency);
-                    client.setIsLoggedIn(true);
+                // 4. Update Engine state to match the new API base state
+                engine.token = api_base.token;
+                engine.accountInfo = api_base.account_info;
 
-                    // Persist active loginid
-                    localStorage.setItem('active_loginid', loginid);
-                    localStorage.setItem('authToken', target_token);
+                // 5. Update VH Mode
+                this.vh_variables.mode = new_mode;
 
-                    // 4. Refresh Subscriptions for new account (important for balance updates)
-                    api_base.unsubscribeAllSubscriptions();
-                    await api_base.subscribe();
+                // 6. Notify UI
+                const account_type = target_loginid.startsWith('CR') ? 'Real' : 'Demo';
+                console.log(`[VH] Switched to ${account_type} (${target_loginid}). Mode: ${new_mode}`);
 
-                    // 5. Update VH Mode
-                    this.vh_variables.mode = new_mode;
+                // 7. Refresh Proposals for new account
+                // We MUST have a fresh proposal ID for the new account to avoid InvalidContractProposal errors
+                engine.renewProposalsOnPurchase();
 
-                    // 6. Notify UI
-                    const account_type = loginid.startsWith('CR') ? 'Real' : 'Demo';
-                    console.log(`[VH] Switched to ${account_type} (${loginid}). Mode: ${new_mode}`);
+                // Wait for proposals to be ready (Redux state)
+                await new Promise(resolve => {
+                    const check = () => {
+                        if (engine.store.getState().proposalsReady) {
+                            resolve();
+                        } else {
+                            setTimeout(check, 200);
+                        }
+                    };
+                    check();
+                });
 
-                    // 7. Refresh Proposals for new account
-                    // We need a fresh proposal ID for the new account to avoid InvalidContractProposal errors
-                    engine.renewProposalsOnPurchase();
+                // Select new proposal
+                const { id: newId, askPrice: newAskPrice } = engine.selectProposal(contract_type);
 
-                    // Wait for proposals to be ready
-                    await new Promise(resolve => {
-                        const check = () => {
-                            if (engine.store.getState().proposalsReady) {
-                                resolve();
-                            } else {
-                                setTimeout(check, 200);
-                            }
-                        };
-                        check();
-                    });
-
-                    // Select new proposal
-                    const { id: newId, askPrice: newAskPrice } = engine.selectProposal(contract_type);
-
-                    // Execute trade with NEW proposal
-                    // RETURN the trade promise so Purchase.js uses this instead of proceeding
-                    return api_base.api.send({ buy: newId, price: newAskPrice });
-                }
+                // Execute trade with NEW proposal
+                // RETURN the trade promise so Purchase.js uses this result
+                return api_base.api.send({ buy: newId, price: newAskPrice });
             }
         } catch (e) {
             console.error('[VH] Error in Virtual Hook logic:', e);
